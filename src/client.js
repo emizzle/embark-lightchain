@@ -5,36 +5,32 @@ const async = require('async');
 const path = require('path');
 const os = require('os');
 const semver = require('semver');
+const {exec, spawn} = require('child_process');
 
 const NAME = "lightchain";
 
+const NOT_IMPLEMENTED_ERROR = __("is not implemented in or not applicable to a lightchain");
+
 const DEFAULTS = {
-  "BIN": "lightchain",
-  "VERSIONS_SUPPORTED": ">=1.3.0",
-  "NETWORK_TYPE": "dev",
-  "NETWORK_ID": 17,
-  "RPC_API": ["web3", "eth", "pubsub", "net", "parity", "private", "parity_pubsub", "traces", "rpc", "shh", "shh_pubsub"],
-  "WS_API": ["web3", "eth", "pubsub", "net", "parity", "private", "parity_pubsub", "traces", "rpc", "shh", "shh_pubsub"],
-  "DEV_WS_API": ["web3", "eth", "pubsub", "net", "parity", "private", "parity_pubsub", "traces", "rpc", "shh", "shh_pubsub", "personal"],
-  "TARGET_GAS_LIMIT": 8000000,
-  "DEV_ACCOUNT": "0xc916cfe5c83dd4fc3c3b0bf2ec2d4e401782875e",
-  "DEV_PASSWORD": "WelcomeToSirius",
-  "DEV_WALLET": {
-    "id": "d9460e00-6895-8f58-f40c-bb57aebe6c00",
-    "version": 3,
-    "crypto": {
-      "cipher": "aes-128-ctr",
-      "cipherparams": {"iv": "74245f453143f9d06a095c6e6e309d5d"},
-      "ciphertext": "2fa611c4aa66452ef81bd1bd288f9d1ed14edf61aa68fc518093f97c791cf719",
-      "kdf": "pbkdf2",
-      "kdfparams": {"c": 10240, "dklen": 32, "prf": "hmac-sha256", "salt": "73b74e437a1144eb9a775e196f450a23ab415ce2c17083c225ddbb725f279b98"},
-      "mac": "f5882ae121e4597bd133136bf15dcbcc1bb2417a25ad205041a50c59def812a8"
-    },
-    "address": "00a329c0648769a73afac7f9381e08fb43dbea72",
-    "name": "Development Account",
-    "meta": "{\"description\":\"Never use this account outside of development chain!\",\"passwordHint\":\"Password is empty string\"}"
-  }
+  BIN: "lightchain",
+  VERSIONS_SUPPORTED: ">=1.3.0",
+  NETWORK_TYPE: "standalone",
+  RPC_API: ['eth', 'web3', 'net', 'debug', 'personal'],
+  WS_API: ['eth', 'web3', 'net', 'shh', 'debug', 'pubsub', 'personal'],
+  DEV_WS_API: ['eth', 'web3', 'net', 'shh', 'debug', 'pubsub', 'personal'],
+  TARGET_GAS_LIMIT: 8000000
 };
+
+const CLI_COMMANDS = {
+  INIT: "init",
+  RUN: "run"
+};
+
+const CLI_FEATURE_SUPPORT = {
+  LIST_ACCOUNTS: false,
+  CREATE_ACCOUNTS: false,
+  GENESIS_FILE: false
+}
 
 const safePush = function(set, value) {
   if (set.indexOf(value) === -1) {
@@ -48,6 +44,10 @@ class LightchainClient {
     return DEFAULTS;
   }
 
+  get CLI_FEATURE_SUPPORT() {
+    return CLI_FEATURE_SUPPORT;
+  }
+
   constructor(options) {
     this.config = options && options.hasOwnProperty('config') ? options.config : {};
     this.env = options && options.hasOwnProperty('env') ? options.env : 'development';
@@ -59,7 +59,13 @@ class LightchainClient {
   }
 
   isReady(data) {
-    return data.indexOf('Public node URL') > -1;
+    if (data.indexOf('HTTP endpoint opened') > -1) {
+      this.httpReady = true;
+    }
+    if (data.indexOf('WebSocket endpoint opened') > -1) {
+      this.wsReady = true;
+    }
+    return this.httpReady && this.wsReady;
   }
 
   /**
@@ -74,54 +80,30 @@ class LightchainClient {
     let config = this.config;
     let cmd = [];
 
-    cmd.push(this.determineNetworkType(config));
-
-    if (config.networkId) {
-      cmd.push(`--network-id=${config.networkId}`);
-    }
-
     if (config.datadir) {
-      cmd.push(`--base-path=${config.datadir}`);
-    }
-
-    if (config.syncMode === 'light') {
-      cmd.push("--light");
-    } else if (config.syncMode === 'fast') {
-      cmd.push("--pruning=fast");
-    } else if (config.syncMode === 'full') {
-      cmd.push("--pruning=archive");
-    }
-
-    // In dev mode we store all users passwords in the devPassword file, so Parity can unlock all users from the start
-    if (this.isDev) cmd.push(`--password=${config.account.devPassword}`);
-    else if (config.account && config.account.password) {
-      cmd.push(`--password=${config.account.password}`);
+      cmd.push(`--datadir=${config.datadir}`);
     }
 
     if (Number.isInteger(config.verbosity) && config.verbosity >= 0 && config.verbosity <= 5) {
       switch (config.verbosity) {
         case 0: // No option to silent Parity, go to less verbose
         case 1:
-          cmd.push("--logging=error");
+          cmd.push("--lvl=error");
           break;
         case 2:
-          cmd.push("--logging=warn");
+          cmd.push("--lvl=warn");
           break;
         case 3:
-          cmd.push("--logging=info");
+          cmd.push("--lvl=info");
           break;
         case 4: // Debug is the max verbosity for Parity
         case 5:
-          cmd.push("--logging=debug");
+          cmd.push("--lvl=debug");
           break;
         default:
-          cmd.push("--logging=info");
+          cmd.push("--lvl=info");
           break;
       }
-    }
-
-    if(this.runAsArchival(config)) {
-      cmd.push("--pruning=archive");
     }
 
     return cmd;
@@ -141,16 +123,12 @@ class LightchainClient {
   }
 
   parseVersion(rawVersionOutput) {
-    let parsed;
-    const match = rawVersionOutput.match(/version Parity(?:-Ethereum)?\/(.*?)\//);
+    let parsed = "0.0.0";
+    const match = rawVersionOutput.match(/Version: ([0-9]\.[0-9]\.[0-9]).*?/);
     if (match) {
       parsed = match[1].trim();
     }
     return parsed;
-  }
-
-  runAsArchival(config) {
-    return config.networkId === 1337 || config.archivalMode;
   }
 
   isSupportedVersion(parsedVersion) {
@@ -170,145 +148,119 @@ class LightchainClient {
 
   determineNetworkType(config) {
     if (this.isDev) {
-      return "--chain=dev";
+      return "--standalone";
     }
-    if (config.networkType === 'rinkeby') {
-      console.warn(__('Parity does not support the Rinkeby PoA network, switching to Kovan PoA network'));
-      config.networkType = 'kovan';
-    } else if (config.networkType === 'testnet') {
-      console.warn(__('Parity "testnet" corresponds to Kovan network, switching to Ropsten to be compliant with Geth parameters'));
-      config.networkType = "ropsten";
+    switch (config.networkType) {
+      case "rinkeby":
+      case "ropsten":
+      case "kovan":
+        console.warn(__('Lightchain does not support the Rinkeby/Ropsten/Kovan testnets. Please switch to geth to use these networks. Using the lightchain Sirius network instead.'));
+        config.networkType = 'sirius';
+        break;
+      case "testnet":
+      case "sirius":
+        config.networkType = 'sirius';
+        break;
+      case "livenet":
+      case "mainnet":
+        config.networkType = 'mainnet';
+        break;
+      default:
+        config.networkType = DEFAULTS.NETWORK_TYPE;
+        break;
     }
-    if (config.genesisBlock) {
-      config.networkType = config.genesisBlock;
-    }
-    return "--chain=" + config.networkType;
+    return `--${config.networkType}`;
   }
 
   newAccountCommand() {
-    return this.bin + " " + this.commonOptions().join(' ') + " account new ";
+    console.warn(`'newAccountCommand' ${NOT_IMPLEMENTED_ERROR}`);
   }
 
-  parseNewAccountCommandResultToAddress(data = "") {
-    return data.replace(/^\n|\n$/g, "");
+  parseNewAccountCommandResultTo_(data = "") {
+    console.warn(`'parseNewAccountCommandResultTo_' ${NOT_IMPLEMENTED_ERROR}`);
   }
 
   listAccountsCommand() {
-    return this.bin + " " + this.commonOptions().join(' ') + " account list ";
+    console.warn(`'listAccountsCommand' ${NOT_IMPLEMENTED_ERROR}`);
   }
 
-  parseListAccountsCommandResultToAddress(data = "") {
-    return data.replace(/^\n|\n$/g, "").split('\n')[0];
+  parseListAccountsCommandResultTo_(data = "") {
+    console.warn(`'parseListAccountsCommandResultTo_' ${NOT_IMPLEMENTED_ERROR}`);
   }
 
-  parseListAccountsCommandResultToAddressList(data = "") {
-    const list = data.split('\n');
-    return list.filter(acc => acc);
+  parseListAccountsCommandResultTo_List(data = "") {
+    console.warn(`'parseListAccountsCommandResultTo_List' ${NOT_IMPLEMENTED_ERROR}`);
   }
 
-  parseListAccountsCommandResultToAddressCount(data = "") {
-    const count = this.parseListAccountsCommandResultToAddressList(data).length;
-    return (count > 0 ? count : 0);
+  parseListAccountsCommandResultTo_Count(data = "") {
+    console.warn(`'parseListAccountsCommandResultTo_Count' ${NOT_IMPLEMENTED_ERROR}`);
   }
 
   determineRpcOptions(config) {
     let cmd = [];
     cmd.push("--port=" + config.port);
-    cmd.push("--jsonrpc-port=" + config.rpcPort);
-    cmd.push("--jsonrpc-interface=" + (config.rpcHost === 'localhost' ? 'local' : config.rpcHost));
+    cmd.push("--rpc");
+    cmd.push("--rpcport=" + config.rpcPort);
+    cmd.push("--rpcaddr=" + config.rpcHost);
     if (config.rpcCorsDomain) {
       if (config.rpcCorsDomain === '*') {
         console.warn('==================================');
-        console.warn(__('rpcCorsDomain set to "all"'));
+        console.warn(__('rpcCorsDomain set to *'));
         console.warn(__('make sure you know what you are doing'));
         console.warn('==================================');
       }
-      cmd.push("--jsonrpc-cors=" + (config.rpcCorsDomain === '*' ? 'all' : config.rpcCorsDomain));
+      cmd.push("--rpccorsdomain=" + config.rpcCorsDomain);
     } else {
       console.warn('==================================');
       console.warn(__('warning: cors is not set'));
       console.warn('==================================');
     }
-    cmd.push("--jsonrpc-hosts=all");
     return cmd;
   }
 
   determineWsOptions(config) {
     let cmd = [];
     if (config.wsRPC) {
-      cmd.push("--ws-port=" + config.wsPort);
-      cmd.push("--ws-interface=" + (config.wsHost === 'localhost' ? 'local' : config.wsHost));
+      cmd.push("--ws");
+      cmd.push("--wsport=" + config.wsPort);
+      cmd.push("--wsaddr=" + config.wsHost);
       if (config.wsOrigins) {
-        const origins = config.wsOrigins.split(',');
-        if (origins.includes('*') || origins.includes("all")) {
+        if (config.wsOrigins === '*') {
           console.warn('==================================');
-          console.warn(__('wsOrigins set to "all"'));
+          console.warn(__('wsOrigins set to *'));
           console.warn(__('make sure you know what you are doing'));
           console.warn('==================================');
-          cmd.push("--ws-origins=all");
-        } else {
-          cmd.push("--ws-origins=" + config.wsOrigins);
         }
+        cmd.push("--wsorigins=" + config.wsOrigins);
       } else {
         console.warn('==================================');
         console.warn(__('warning: wsOrigins is not set'));
         console.warn('==================================');
       }
-      cmd.push("--ws-hosts=all");
     }
     return cmd;
   }
 
   initDevChain(datadir, callback) {
-    // Parity requires specific initialization also for the dev chain
-    const self = this;
-    const keysDataDir = datadir + '/keys/DevelopmentChain';
-    async.waterfall([
-      function makeDir(next) {
-        fs.mkdirp(keysDataDir, (err, _result) => {
-          next(err);
-        });
-      },
-      function createDevAccount(next) {
-        self.createDevAccount(keysDataDir, next);
-      },
-      function mkDevPasswordDir(next) {
-        fs.mkdirp(path.dirname(self.config.account.devPassword), (err, _result) => {
-          next(err);
-        });
-      },
-      function getText(next) {
-        if (!self.config.account.password) {
-          return next(null, os.EOL + 'dev_password');
+    let args = [CLI_COMMANDS.INIT];
+    args = args.concat(this.commonOptions());
+    exec(`${this.bin} ${args.join(" ")}`, {}, (err, stdout, _stderr) => {
+      if (err || _stderr) {
+        if(err.message && err.message.includes(`unable to initialize lightchain node. ${datadir} already exists`)) {
+          return callback();
         }
-        fs.readFile(dappPath(self.config.account.password), {encoding: 'utf8'}, (err, content) => {
-          next(err, os.EOL + content);
-        });
-      },
-      function updatePasswordFile(passwordList, next) {
-        fs.writeFile(self.config.account.devPassword, passwordList, next);
+        return callback(err);
       }
-    ], (err) => {
-      callback(err);
+      callback();
     });
   }
 
-  createDevAccount(keysDataDir, cb) {
-    const devAccountWallet = keysDataDir + '/dev.wallet';
-    fs.writeFile(devAccountWallet, JSON.stringify(DEFAULTS.DEV_WALLET), function(err) {
-      if (err) {
-        return cb(err);
-      }
-      cb();
-    });
-  }
-
-  mainCommand(address, done) {
+  mainCommand(_address, done) {
     let self = this;
     let config = this.config;
     let rpc_api = this.config.rpcApi;
     let ws_api = this.config.wsApi;
-    let args = [];
+    let args = [CLI_COMMANDS.RUN];
     async.series([
       function commonOptions(callback) {
         let cmd = self.commonOptions();
@@ -325,78 +277,32 @@ class LightchainClient {
         args = args.concat(cmd);
         callback(null, cmd);
       },
-      function dontGetPeers(callback) {
-        if (config.nodiscover) {
-          args.push("--no-discovery");
-          return callback(null, "--no-discovery");
-        }
-        callback(null, "");
-      },
       function vmDebug(callback) {
         if (config.vmdebug) {
-          args.push("--tracing on");
-          return callback(null, "--tracing on");
+          args.push("--trace");
+          return callback(null, "--trace");
         }
         callback(null, "");
       },
-      function maxPeers(callback) {
-        let cmd = "--max-peers=" + config.maxpeers;
-        args.push(cmd);
-        callback(null, cmd);
-      },
-      function bootnodes(callback) {
-        if (config.bootnodes && config.bootnodes !== "" && config.bootnodes !== []) {
-          args.push("--bootnodes=" + config.bootnodes);
-          return callback(null, "--bootnodes=" + config.bootnodes);
-        }
-        callback("");
-      },
-      function whisper(callback) {
-        if (config.whisper) {
-          safePush(rpc_api, 'shh');
-          safePush(rpc_api, 'shh_pubsub');
-          safePush(ws_api, 'shh');
-          safePush(ws_api, 'shh_pubsub');
-          args.push("--whisper");
-          return callback(null, "--whisper");
-        }
-        callback("");
-      },
+      // function whisper(callback) {
+      //   if (config.whisper) {
+      //     rpc_api.push('shh');
+      //     if (ws_api.indexOf('shh') === -1) {
+      //       ws_api.push('shh');
+      //     }
+      //     args.push("--shh");
+      //     return callback(null, "--shh ");
+      //   }
+      //   callback("");
+      // },
       function rpcApi(callback) {
-        args.push('--jsonrpc-apis=' + rpc_api.join(','));
-        callback(null, '--jsonrpc-apis=' + rpc_api.join(','));
+        args.push('--rpcapi=' + rpc_api.join(','));
+        callback(null, '--rpcapi=' + rpc_api.join(','));
       },
       function wsApi(callback) {
-        args.push('--ws-apis=' + ws_api.join(','));
-        callback(null, '--ws-apis=' + ws_api.join(','));
+        args.push('--wsapi=' + ws_api.join(','));
+        callback(null, '--wsapi=' + ws_api.join(','));
       },
-      function accountToUnlock(callback) {
-        if (self.isDev) {
-          let unlockAddressList = self.config.unlockAddressList ? self.config.unlockAddressList : DEFAULTS.DEV_ACCOUNT;
-          args.push("--unlock=" + unlockAddressList);
-          return callback(null, "--unlock=" + unlockAddressList);
-        }
-        let accountAddress = "";
-        if (config.account && config.account.address) {
-          accountAddress = config.account.address;
-        } else {
-          accountAddress = address;
-        }
-        if (accountAddress && !self.isDev) {
-          args.push("--unlock=" + accountAddress);
-          return callback(null, "--unlock=" + accountAddress);
-        }
-        callback(null, "");
-      },
-      function gasLimit(callback) {
-        if (config.targetGasLimit) {
-          args.push("--gas-floor-target=" + config.targetGasLimit);
-          return callback(null, "--gas-floor-target=" + config.targetGasLimit);
-        }
-        // Default Parity gas limit is 4700000: let's set to the geth default
-        args.push("--gas-floor-target=" + DEFAULTS.TARGET_GAS_LIMIT);
-        return callback(null, "--gas-floor-target=" + DEFAULTS.TARGET_GAS_LIMIT);
-      }
     ], function(err) {
       if (err) {
         throw new Error(err.message);
