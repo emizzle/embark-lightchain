@@ -1,5 +1,5 @@
 import { __ } from 'embark-i18n';
-import { dappPath } from 'embark-utils';
+import { dappPath, ipcPath } from 'embark-utils';
 import * as fs from 'fs-extra';
 const async = require('async');
 const path = require('path');
@@ -146,30 +146,30 @@ class LightchainClient {
     }
   }
 
-  determineNetworkType(config) {
+  determineNetworkType() {
     if (this.isDev) {
       return "--standalone";
     }
-    switch (config.networkType) {
+    switch (this.config.networkType) {
       case "rinkeby":
       case "ropsten":
       case "kovan":
         console.warn(__('Lightchain does not support the Rinkeby/Ropsten/Kovan testnets. Please switch to geth to use these networks. Using the lightchain Sirius network instead.'));
-        config.networkType = 'sirius';
+        this.config.networkType = 'sirius';
         break;
       case "testnet":
       case "sirius":
-        config.networkType = 'sirius';
+          this.config.networkType = 'sirius';
         break;
       case "livenet":
       case "mainnet":
-        config.networkType = 'mainnet';
+          this.config.networkType = 'mainnet';
         break;
       default:
-        config.networkType = DEFAULTS.NETWORK_TYPE;
+          this.config.networkType = DEFAULTS.NETWORK_TYPE;
         break;
     }
-    return `--${config.networkType}`;
+    return `--${this.config.networkType}`;
   }
 
   newAccountCommand() {
@@ -196,9 +196,16 @@ class LightchainClient {
     console.warn(`'parseListAccountsCommandResultTo_Count' ${NOT_IMPLEMENTED_ERROR}`);
   }
 
+  determineMessagingPortOptions(config) {
+    let cmd = [];
+    if (config.tmt_p2p_port) cmd.push("--tmt_p2p_port=" + config.tmt_p2p_port);
+    if (config.tmt_proxy_port) cmd.push("--tmt_proxy_port" + config.tmt_proxy_port);
+    if (config.tmt_rpc_port) cmd.push("--tmt_rpc_port=" + config.tmt_rpc_port);
+    return cmd;
+  }
+
   determineRpcOptions(config) {
     let cmd = [];
-    cmd.push("--port=" + config.port);
     cmd.push("--rpc");
     cmd.push("--rpcport=" + config.rpcPort);
     cmd.push("--rpcaddr=" + config.rpcHost);
@@ -243,13 +250,14 @@ class LightchainClient {
 
   initDevChain(datadir, callback) {
     let args = [CLI_COMMANDS.INIT];
+    args = args.concat(this.determineNetworkType());
     args = args.concat(this.commonOptions());
     exec(`${this.bin} ${args.join(" ")}`, {}, (err, stdout, _stderr) => {
-      if (err || _stderr) {
-        if(err.message && err.message.includes(`unable to initialize lightchain node. ${datadir} already exists`)) {
+      if (err || stdout) {
+        if(err && err.message && err.message.includes(`unable to initialize lightchain node. ${datadir} already exists`)) {
           return callback();
         }
-        return callback(err);
+        return callback((err && err.message) || stdout);
       }
       callback();
     });
@@ -264,6 +272,11 @@ class LightchainClient {
     async.series([
       function commonOptions(callback) {
         let cmd = self.commonOptions();
+        args = args.concat(cmd);
+        callback(null, cmd);
+      },
+      function messagePortOptions(callback) {
+        let cmd = self.determineMessagingPortOptions(self.config);
         args = args.concat(cmd);
         callback(null, cmd);
       },
@@ -284,6 +297,7 @@ class LightchainClient {
         }
         callback(null, "");
       },
+      // TODO: uncomment when lightchain implements Whisper support
       // function whisper(callback) {
       //   if (config.whisper) {
       //     rpc_api.push('shh');
