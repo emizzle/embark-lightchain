@@ -26,42 +26,22 @@ export default class EmbarkLightchain {
   
   async onBlockchainReady() {
     this.events.request("blockchain:get", async (web3) => {
-      // if we're in dev mode, unlock our default development deployment account
+      // if we're in dev mode, unlock our developer account
       if (this.blockchainConfig.isDev) {
         const { address, password } = DEV_ACCOUNT;
         await web3.eth.personal.unlockAccount(address, password);
         this.embark.logger.info("Unlocked lightchain dev account");
       }
-      await this.createAccounts(web3);
+      this.createAccounts();
     });
   }
 
-  async createAccounts(web3) {
+  createAccounts() {
     const nodeAccounts = this.blockchainConfig.accounts.find(account => account.nodeAccounts);
     if(!nodeAccounts) return;
 
-    const { numAddresses: strNumAddresses = "1", password: passwordFile } = nodeAccounts;
-    const numAddresses = parseInt(strNumAddresses, 10);
-    
-    if(numAddresses) {
-      if(!passwordFile) {
-        return this.embark.logger.error("Missing password in blockchain config. Please add a path to a password file to the 'accounts.password' property in the blockchain config.");
-      }
-      const password = (await pify(fs.readFile)(passwordFile)).toString();
-      try {
-        // get num existing accounts on node
-        let numCreatedAccts = (await web3.eth.getAccounts()).length;
-        while (numAddresses > numCreatedAccts++) {
-          const address = await web3.eth.personal.newAccount(password);
-          await web3.eth.personal.unlockAccount(address, password);
-          this.embark.logger.info(`Created and unlocked account '${address}'`);
-        }
-        this.embark.logger.info(`Accounts after creating/unlocking: ${JSON.stringify(await web3.eth.getAccounts())}`);
-        this.embark.logger.info(`Accounts after creating/unlocking (personal): ${JSON.stringify(await web3.eth.personal.getAccounts())}`);
-      } catch (err) {
-        return this.embark.logger.error(`Error getting existing accounts and creating new accounts: ${(err && err.message) || err}`)
-      }
-    }
+    // nodeAccounts is not supported. For more information, please read https://notes.status.im/4Zvs5EcUR_-Eu-BOwnCNEw
+    this.embark.logger.warn("Specifying blockchain config node accounts is not supported using a blockchain plugin yet. You can still specify wallet accounts in the config.");
   }
 
   registerBlockchain() {
