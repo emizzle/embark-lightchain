@@ -198,9 +198,13 @@ class LightchainClient {
 
   determineMessagingPortOptions(config) {
     let cmd = [];
-    if (config.tmt_p2p_port) cmd.push("--tmt_p2p_port=" + config.tmt_p2p_port);
-    if (config.tmt_proxy_port) cmd.push("--tmt_proxy_port" + config.tmt_proxy_port);
-    if (config.tmt_rpc_port) cmd.push("--tmt_rpc_port=" + config.tmt_rpc_port);
+    if (!config.clientConfig) {
+      return cmd;
+    }
+    const {tmt_p2p_port, tmt_proxy_port, tmt_rpc_port} = config.clientConfig;
+    if (tmt_p2p_port) cmd.push("--tmt_p2p_port=" + tmt_p2p_port);
+    if (tmt_proxy_port) cmd.push("--tmt_proxy_port=" + tmt_proxy_port);
+    if (tmt_rpc_port) cmd.push("--tmt_rpc_port=" + tmt_rpc_port);
     return cmd;
   }
 
