@@ -37,7 +37,7 @@ export default class EmbarkLightchain {
   }
 
   createAccounts() {
-    const nodeAccounts = this.blockchainConfig.accounts.find(account => account.nodeAccounts);
+    const nodeAccounts = this.blockchainConfig.accounts && this.blockchainConfig.accounts.find(account => account.nodeAccounts);
     if(!nodeAccounts) return;
 
     // nodeAccounts is not supported. For more information, please read https://notes.status.im/4Zvs5EcUR_-Eu-BOwnCNEw

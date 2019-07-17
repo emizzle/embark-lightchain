@@ -17,8 +17,7 @@ const DEFAULTS = {
   NETWORK_TYPE: "standalone",
   RPC_API: ['eth', 'web3', 'net', 'debug', 'personal'],
   WS_API: ['eth', 'web3', 'net', 'shh', 'debug', 'pubsub', 'personal'],
-  DEV_WS_API: ['eth', 'web3', 'net', 'shh', 'debug', 'pubsub', 'personal'],
-  TARGET_GAS_LIMIT: 8000000
+  DEV_WS_API: ['eth', 'web3', 'net', 'shh', 'debug', 'pubsub', 'personal']
 };
 
 const CLI_COMMANDS = {
@@ -86,7 +85,9 @@ class LightchainClient {
 
     if (Number.isInteger(config.verbosity) && config.verbosity >= 0 && config.verbosity <= 5) {
       switch (config.verbosity) {
-        case 0: // No option to silent Parity, go to less verbose
+        case 0:
+          cmd.push("--lvl=crit");
+          break;
         case 1:
           cmd.push("--lvl=error");
           break;
@@ -96,9 +97,11 @@ class LightchainClient {
         case 3:
           cmd.push("--lvl=info");
           break;
-        case 4: // Debug is the max verbosity for Parity
-        case 5:
+        case 4:
           cmd.push("--lvl=debug");
+          break;
+        case 5:
+          cmd.push("--lvl=trace");
           break;
         default:
           cmd.push("--lvl=info");
