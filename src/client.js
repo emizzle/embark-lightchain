@@ -16,8 +16,8 @@ const DEFAULTS = {
   VERSIONS_SUPPORTED: ">=1.3.0",
   NETWORK_TYPE: "standalone",
   RPC_API: ['eth', 'web3', 'net', 'debug', 'personal'],
-  WS_API: ['eth', 'web3', 'net', 'shh', 'debug', 'pubsub', 'personal'],
-  DEV_WS_API: ['eth', 'web3', 'net', 'shh', 'debug', 'pubsub', 'personal']
+  WS_API: ['eth', 'web3', 'net', 'debug', 'pubsub', 'personal'],
+  DEV_WS_API: ['eth', 'web3', 'net', 'debug', 'pubsub', 'personal']
 };
 
 const CLI_COMMANDS = {
@@ -159,10 +159,12 @@ class LightchainClient {
       case "kovan":
         console.warn(__('Lightchain does not support the Rinkeby/Ropsten/Kovan testnets. Please switch to geth to use these networks. Using the lightchain Sirius network instead.'));
         this.config.networkType = 'sirius';
+        this.config.networkId = 162;
         break;
       case "testnet":
       case "sirius":
           this.config.networkType = 'sirius';
+          this.config.networkId = 162;
         break;
       case "livenet":
       case "mainnet":
@@ -175,29 +177,29 @@ class LightchainClient {
     return `--${this.config.networkType}`;
   }
 
-  newAccountCommand() {
-    console.warn(`'newAccountCommand' ${NOT_IMPLEMENTED_ERROR}`);
-  }
+  // newAccountCommand() {
+  //   console.warn(`'newAccountCommand' ${NOT_IMPLEMENTED_ERROR}`);
+  // }
 
-  parseNewAccountCommandResultTo_(data = "") {
-    console.warn(`'parseNewAccountCommandResultTo_' ${NOT_IMPLEMENTED_ERROR}`);
-  }
+  // parseNewAccountCommandResultTo_(data = "") {
+  //   console.warn(`'parseNewAccountCommandResultTo_' ${NOT_IMPLEMENTED_ERROR}`);
+  // }
 
-  listAccountsCommand() {
-    console.warn(`'listAccountsCommand' ${NOT_IMPLEMENTED_ERROR}`);
-  }
+  // listAccountsCommand() {
+  //   console.warn(`'listAccountsCommand' ${NOT_IMPLEMENTED_ERROR}`);
+  // }
 
-  parseListAccountsCommandResultTo_(data = "") {
-    console.warn(`'parseListAccountsCommandResultTo_' ${NOT_IMPLEMENTED_ERROR}`);
-  }
+  // parseListAccountsCommandResultTo_(data = "") {
+  //   console.warn(`'parseListAccountsCommandResultTo_' ${NOT_IMPLEMENTED_ERROR}`);
+  // }
 
-  parseListAccountsCommandResultTo_List(data = "") {
-    console.warn(`'parseListAccountsCommandResultTo_List' ${NOT_IMPLEMENTED_ERROR}`);
-  }
+  // parseListAccountsCommandResultTo_List(data = "") {
+  //   console.warn(`'parseListAccountsCommandResultTo_List' ${NOT_IMPLEMENTED_ERROR}`);
+  // }
 
-  parseListAccountsCommandResultTo_Count(data = "") {
-    console.warn(`'parseListAccountsCommandResultTo_Count' ${NOT_IMPLEMENTED_ERROR}`);
-  }
+  // parseListAccountsCommandResultTo_Count(data = "") {
+  //   console.warn(`'parseListAccountsCommandResultTo_Count' ${NOT_IMPLEMENTED_ERROR}`);
+  // }
 
   determineMessagingPortOptions(config) {
     let cmd = [];
@@ -255,13 +257,13 @@ class LightchainClient {
     return cmd;
   }
 
-  initDevChain(datadir, callback) {
+  initChain(callback) {
     let args = [CLI_COMMANDS.INIT];
     args = args.concat(this.determineNetworkType());
     args = args.concat(this.commonOptions());
     exec(`${this.bin} ${args.join(" ")}`, {}, (err, stdout, _stderr) => {
       if (err || stdout) {
-        if(err && err.message && err.message.includes(`unable to initialize lightchain node. ${datadir} already exists`)) {
+        if(err && err.message && err.message.includes(`unable to initialize lightchain node. ${this.config.datadir} already exists`)) {
           return callback();
         }
         return callback((err && err.message) || stdout);
