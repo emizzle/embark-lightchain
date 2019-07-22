@@ -1,4 +1,3 @@
-import pify from "pify";
 import fs from "fs";
 
 const DEV_ACCOUNT = {

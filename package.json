@@ -45,10 +45,8 @@
     "@babel/plugin-proposal-optional-chaining": "7.2.0",
     "@babel/runtime-corejs2": "7.3.1",
     "async": "3.1.0",
-    "embark-i18n": "^4.1.0-beta.3",
-    "embark-utils": "^4.1.0-beta.4",
-    "fs-extra": "8.1.0",
-    "pify": "4.0.1"
+    "embark-blockchain-process": "^4.1.0-beta.2",
+    "fs-extra": "8.1.0"
   },
   "devDependencies": {
     "@babel/cli": "7.2.3",
