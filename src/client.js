@@ -4,19 +4,6 @@ const async = require('async');
 const path = require('path');
 const {exec, spawn} = require('child_process');
 
-const DEFAULTS = {
-  BIN: "lightchain",
-  VERSIONS_SUPPORTED: ">=1.3.0",
-  NETWORK_TYPE: "standalone",
-  RPC_API: ['eth', 'web3', 'net', 'debug', 'personal'],
-  WS_API: ['eth', 'web3', 'net', 'debug', 'pubsub', 'personal'],
-  DEV_WS_API: ['eth', 'web3', 'net', 'debug', 'pubsub', 'personal']
-};
-
-const NAME = "lightchain";
-
-const PRETTY_NAME = "Lightchain (https://github.com/lightstreams-network/lightchain)";
-
 const CLI_COMMANDS = {
   INIT: "init",
   RUN: "run"
@@ -25,7 +12,18 @@ const CLI_COMMANDS = {
 class LightchainClient extends BaseBlockchainClient {
 
   constructor(options) {
-    super(options);
+    const DEFAULTS = {
+      BIN: "lightchain",
+      NETWORK_TYPE: "standalone",
+      RPC_API: ['eth', 'web3', 'net', 'debug', 'personal'],
+      WS_API: ['eth', 'web3', 'net', 'debug', 'pubsub', 'personal'],
+      DEV_WS_API: ['eth', 'web3', 'net', 'debug', 'pubsub', 'personal'],
+      NETWORK_ID: 162
+    };
+    const versSupported = ">=1.3.0";
+    const name = "lightchain";
+    const prettyName = "Lightchain (https://github.com/lightstreams-network/lightchain)";
+    super(options, {name, prettyName, defaults: DEFAULTS, versSupported});
   }
 
   //#region Overriden Methods
@@ -46,8 +44,6 @@ class LightchainClient extends BaseBlockchainClient {
   needKeepAlive() {
     return false;
   }
-
-  
 
   getMiner() {
     console.warn("Miner requested, but lightchain does not need a miner! Please remove the 'mineWhenNeeded' setting from the blockchain config.").yellow;
@@ -74,34 +70,31 @@ class LightchainClient extends BaseBlockchainClient {
   }
 
   mainCommand(_address, done) {
-    let self = this;
-    let config = this.config;
-    let rpc_api = this.config.rpcApi;
-    let ws_api = this.config.wsApi;
-    let args = [CLI_COMMANDS.RUN];
+    const { rpc_api, ws_api } = this.config;
+    const args = [CLI_COMMANDS.RUN];
     async.series([
       function commonOptions(callback) {
-        let cmd = self.commonOptions();
+        let cmd = this.commonOptions();
         args = args.concat(cmd);
         callback(null, cmd);
       },
       function messagePortOptions(callback) {
-        let cmd = self.determineMessagingPortOptions(self.config);
+        let cmd = this.determineMessagingPortOptions(this.config);
         args = args.concat(cmd);
         callback(null, cmd);
       },
       function rpcOptions(callback) {
-        let cmd = self.determineRpcOptions(self.config);
+        let cmd = this.determineRpcOptions(this.config);
         args = args.concat(cmd);
         callback(null, cmd);
       },
       function wsOptions(callback) {
-        let cmd = self.determineWsOptions(self.config);
+        let cmd = this.determineWsOptions(this.config);
         args = args.concat(cmd);
         callback(null, cmd);
       },
       function vmDebug(callback) {
-        if (config.vmdebug) {
+        if (this.config.vmdebug) {
           args.push("--trace");
           return callback(null, "--trace");
         }
@@ -131,7 +124,7 @@ class LightchainClient extends BaseBlockchainClient {
       if (err) {
         throw new Error(err.message);
       }
-      return done(self.bin, args);
+      return done(this.bin, args);
     });
   }
 
