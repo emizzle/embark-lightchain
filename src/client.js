@@ -12,7 +12,7 @@ const CLI_COMMANDS = {
 class LightchainClient extends BaseBlockchainClient {
 
   constructor(options) {
-    const DEFAULTS = {
+    options.DEFAULTS = {
       BIN: "lightchain",
       NETWORK_TYPE: "standalone",
       RPC_API: ['eth', 'web3', 'net', 'debug', 'personal'],
@@ -20,10 +20,10 @@ class LightchainClient extends BaseBlockchainClient {
       DEV_WS_API: ['eth', 'web3', 'net', 'debug', 'pubsub', 'personal'],
       NETWORK_ID: 162
     };
-    const versSupported = ">=1.3.0";
-    const name = "lightchain";
-    const prettyName = "Lightchain (https://github.com/lightstreams-network/lightchain)";
-    super(options, {name, prettyName, defaults: DEFAULTS, versSupported});
+    options.versSupported = ">=1.3.0";
+    options.name = "lightchain";
+    options.prettyName = "Lightchain (https://github.com/lightstreams-network/lightchain)";
+    super(options);
   }
 
   //#region Overriden Methods
@@ -70,31 +70,32 @@ class LightchainClient extends BaseBlockchainClient {
   }
 
   mainCommand(_address, done) {
-    const { rpc_api, ws_api } = this.config;
-    const args = [CLI_COMMANDS.RUN];
+    let { rpcApi, wsApi } = this.config;
+    let args = [CLI_COMMANDS.RUN];
+    const self = this;
     async.series([
       function commonOptions(callback) {
-        let cmd = this.commonOptions();
+        let cmd = self.commonOptions();
         args = args.concat(cmd);
         callback(null, cmd);
       },
       function messagePortOptions(callback) {
-        let cmd = this.determineMessagingPortOptions(this.config);
+        let cmd = self.determineMessagingPortOptions(self.config);
         args = args.concat(cmd);
         callback(null, cmd);
       },
       function rpcOptions(callback) {
-        let cmd = this.determineRpcOptions(this.config);
+        let cmd = self.determineRpcOptions(self.config);
         args = args.concat(cmd);
         callback(null, cmd);
       },
       function wsOptions(callback) {
-        let cmd = this.determineWsOptions(this.config);
+        let cmd = self.determineWsOptions(self.config);
         args = args.concat(cmd);
         callback(null, cmd);
       },
       function vmDebug(callback) {
-        if (this.config.vmdebug) {
+        if (self.config.vmdebug) {
           args.push("--trace");
           return callback(null, "--trace");
         }
@@ -113,18 +114,18 @@ class LightchainClient extends BaseBlockchainClient {
       //   callback("");
       // },
       function rpcApi(callback) {
-        args.push('--rpcapi=' + rpc_api.join(','));
-        callback(null, '--rpcapi=' + rpc_api.join(','));
+        args.push('--rpcapi=' + self.config.rpcApi.join(','));
+        callback(null, '--rpcapi=' + self.config.rpcApi.join(','));
       },
       function wsApi(callback) {
-        args.push('--wsapi=' + ws_api.join(','));
-        callback(null, '--wsapi=' + ws_api.join(','));
+        args.push('--wsapi=' + self.config.wsApi.join(','));
+        callback(null, '--wsapi=' + self.config.wsApi.join(','));
       },
     ], function(err) {
       if (err) {
         throw new Error(err.message);
       }
-      return done(this.bin, args);
+      return done(self.bin, args);
     });
   }
 
