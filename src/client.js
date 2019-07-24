@@ -12,13 +12,12 @@ const CLI_COMMANDS = {
 class LightchainClient extends BaseBlockchainClient {
 
   constructor(options) {
-    options.DEFAULTS = {
-      BIN: "lightchain",
-      NETWORK_TYPE: "standalone",
-      RPC_API: ['eth', 'web3', 'net', 'debug', 'personal'],
-      WS_API: ['eth', 'web3', 'net', 'debug', 'pubsub', 'personal'],
-      DEV_WS_API: ['eth', 'web3', 'net', 'debug', 'pubsub', 'personal'],
-      NETWORK_ID: 162
+    options.defaults = {
+      bin: "lightchain",
+      networkType: "standalone",
+      rpcApi: ['eth', 'web3', 'net', 'debug', 'personal'],
+      wsApi: ['eth', 'web3', 'net', 'debug', 'pubsub', 'personal'],
+      devWsApi: ['eth', 'web3', 'net', 'debug', 'pubsub', 'personal']
     };
     options.versSupported = ">=1.3.0";
     options.name = "lightchain";
@@ -192,7 +191,7 @@ class LightchainClient extends BaseBlockchainClient {
           this.config.networkType = 'mainnet';
         break;
       default:
-          this.config.networkType = DEFAULTS.NETWORK_TYPE;
+          this.config.networkType = this.defaults.networkType;
         break;
     }
     return `--${this.config.networkType}`;
