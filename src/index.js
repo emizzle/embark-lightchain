@@ -22,13 +22,18 @@ export default class EmbarkLightchain {
     this.events.once("config:load:blockchain", (blockchainConfig) => {
       this.blockchainConfig = blockchainConfig;
     });
-    this.events.once("blockchain:ready", () => {
-      this.onBlockchainReady();
-      this.embark.logger.info("Lightchain node is ready!");
+    this.embark.registerActionForEvent("blockchain:provider:ready", (cb) => {
+      this.onProviderReady((err) => {
+        if (err) {
+          return this.embark.logger.error(err.message);
+        }
+        this.embark.logger.info("Lightchain node is ready!");
+        cb();
+      });
     });
   }
 
-  onBlockchainReady() {
+  onProviderReady(callback) {
     this.events.request("blockchain:get", async (web3) => {
       this.web3 = web3;
       try {
@@ -44,9 +49,10 @@ export default class EmbarkLightchain {
           }
           await this.ensureNodeAccounts(configuredNodeAccounts, password);
           await this.unlockNodeAccounts(password);
+          callback();
         }
       } catch (err) {
-        this.embark.logger.error(err.message);
+        callback(err);
       }
     });
   }
