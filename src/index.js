@@ -107,7 +107,7 @@ export default class EmbarkLightchain {
           unlockPassword = DEV_ACCOUNT.password;
           isDeveloperAcct = true;
         }
-        const unlockResult = await this.web3.eth.personal.unlockAccount(address, unlockPassword);
+        const unlockResult = await this.web3.eth.personal.unlockAccount(address, unlockPassword, 0);
         if (unlockResult) {
           this.embark.logger.info(`Successfully unlocked ${isDeveloperAcct ? "developer" : ""} node account '${address}'`);
         } else {
