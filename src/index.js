@@ -1,3 +1,4 @@
+import { BaseBlockchainPlugin } from 'embark-blockchain-process';
 import fs from "fs";
 
 const DEV_ACCOUNT = {
@@ -8,53 +9,25 @@ const TEST_ACCOUNT = {
   address: "0xd119b8b038d3a67d34ca1d46e1898881626a082b"
 };
 
-export default class EmbarkLightchain {
+const BLOCKCHAIN_CLIENT_OPTIONS = {
+  defaults: {
+    bin: "lightchain",
+    networkType: "standalone",
+    rpcApi: ['eth', 'web3', 'net', 'debug', 'personal'],
+    wsApi: ['eth', 'web3', 'net', 'debug', 'pubsub', 'personal'],
+    devWsApi: ['eth', 'web3', 'net', 'debug', 'pubsub', 'personal']
+  },
+  versSupported: ">=1.3.0",
+  name: "lightchain",
+  prettyName: "Lightchain (https://github.com/lightstreams-network/lightchain)",
+  clientPath: require.resolve("./client")
+};
+
+export default class EmbarkLightchain extends BaseBlockchainPlugin {
   constructor(embark) {
-
-    this.embark = embark;
-    this.events = embark.events;
-    this.pluginConfig = embark.pluginConfig;
+    super(embark, BLOCKCHAIN_CLIENT_OPTIONS);
+    this.logger = embark.logger;
     this.isDev = embark.config.env === "development";
-
-    this.registerBlockchain();
-
-    // gets hydrated blockchain config from embark, use it to init
-    this.events.once("config:load:blockchain", (blockchainConfig) => {
-      this.blockchainConfig = blockchainConfig;
-    });
-    this.embark.registerActionForEvent("blockchain:provider:ready", (cb) => {
-      this.onProviderReady((err) => {
-        if (err) {
-          return this.embark.logger.error(err.message);
-        }
-        this.embark.logger.info("Lightchain node is ready!");
-        cb();
-      });
-    });
-  }
-
-  onProviderReady(callback) {
-    this.events.request("blockchain:get", async (web3) => {
-      this.web3 = web3;
-      try {
-        const configuredNodeAccounts = this.blockchainConfig.accounts && this.blockchainConfig.accounts.find(account => account.nodeAccounts);
-        let password = "";
-        if (configuredNodeAccounts) {
-          if (configuredNodeAccounts.password) {
-            try {
-              password = fs.readFileSync(configuredNodeAccounts.password).toString();
-            } catch (err) {
-              throw new Error(`Error reading password file '${configuredNodeAccounts.password}': ${err.message || err}`)
-            }
-          }
-          await this.ensureNodeAccounts(configuredNodeAccounts, password);
-          await this.unlockNodeAccounts(password);
-          callback();
-        }
-      } catch (err) {
-        callback(err);
-      }
-    });
   }
 
   get nodeAccounts() {
@@ -65,6 +38,26 @@ export default class EmbarkLightchain {
         account.toLowerCase() !== TEST_ACCOUNT.address.toLowerCase()
       );
     })();
+  }
+
+  async createAndUnlockAccounts() {
+    try {
+      const configuredNodeAccounts = this.blockchainConfig.accounts && this.blockchainConfig.accounts.find(account => account.nodeAccounts);
+      let password = "";
+      if (configuredNodeAccounts) {
+        if (configuredNodeAccounts.password) {
+          try {
+            password = fs.readFileSync(configuredNodeAccounts.password).toString();
+          } catch (err) {
+            throw new Error(`Error reading password file '${configuredNodeAccounts.password}': ${err.message || err}`)
+          }
+        }
+        await this.ensureNodeAccounts(configuredNodeAccounts, password);
+        await this.unlockNodeAccounts(password);
+      }
+    } catch (err) {
+      throw new Error(`Error creating and unlocking accounts: ${err.message || err}`);
+    }
   }
 
   async ensureNodeAccounts(configuredNodeAccounts, password) {
@@ -82,7 +75,7 @@ export default class EmbarkLightchain {
       try {
         while ((currNodeAccounts.length + accountsCreated++) < ensureNumNodeAccounts) {
           const address = await this.web3.eth.personal.newAccount(password);
-          this.embark.logger.info(`Created node account '${address}'`);
+          this.logger.info(`Created node account '${address}'`);
         }
       } catch (err) {
         throw new Error(`Error creating new node account: ${err.message || err}`);
@@ -95,7 +88,7 @@ export default class EmbarkLightchain {
 
     // unlock node account - warn if no password specified
     if (password === "") {
-      this.embark.logger.warn("A password was not specified for the node account. A blank password will be used to unlock the account.");
+      this.logger.warn("A password was not specified for the node account. A blank password will be used to unlock the account.");
     }
 
     const errors = [];
@@ -109,7 +102,7 @@ export default class EmbarkLightchain {
         }
         const unlockResult = await this.web3.eth.personal.unlockAccount(address, unlockPassword, 0);
         if (unlockResult) {
-          this.embark.logger.info(`Successfully unlocked ${isDeveloperAcct ? "developer" : ""} node account '${address}'`);
+          this.logger.info(`Successfully unlocked ${isDeveloperAcct ? "developer" : ""} node account '${address}'`);
         } else {
           errors.push(new Error(`Account unlock failed for '${address}'`));
         }
@@ -121,9 +114,5 @@ export default class EmbarkLightchain {
     if (errors.length) {
       throw new Error(`Error unlocking node accounts: ${errors.join("\n")}`);
     }
-  }
-
-  registerBlockchain() {
-    this.embark.registerBlockchain("lightchain", require.resolve("./client"));
   }
 }

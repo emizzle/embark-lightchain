@@ -12,16 +12,16 @@ const CLI_COMMANDS = {
 class LightchainClient extends BaseBlockchainClient {
 
   constructor(options) {
-    options.defaults = {
-      bin: "lightchain",
-      networkType: "standalone",
-      rpcApi: ['eth', 'web3', 'net', 'debug', 'personal'],
-      wsApi: ['eth', 'web3', 'net', 'debug', 'pubsub', 'personal'],
-      devWsApi: ['eth', 'web3', 'net', 'debug', 'pubsub', 'personal']
-    };
-    options.versSupported = ">=1.3.0";
-    options.name = "lightchain";
-    options.prettyName = "Lightchain (https://github.com/lightstreams-network/lightchain)";
+    // options.defaults = {
+    //   bin: "lightchain",
+    //   networkType: "standalone",
+    //   rpcApi: ['eth', 'web3', 'net', 'debug', 'personal'],
+    //   wsApi: ['eth', 'web3', 'net', 'debug', 'pubsub', 'personal'],
+    //   devWsApi: ['eth', 'web3', 'net', 'debug', 'pubsub', 'personal']
+    // };
+    // options.versSupported = ">=1.3.0";
+    // options.name = "lightchain";
+    // options.prettyName = "Lightchain (https://github.com/lightstreams-network/lightchain)";
     super(options);
   }
 
