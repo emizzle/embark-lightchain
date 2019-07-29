@@ -1,4 +1,4 @@
-import { BaseBlockchainPlugin } from 'embark-blockchain-process';
+import {BaseBlockchainPlugin} from 'embark-blockchain-process';
 import fs from "fs";
 
 const DEV_ACCOUNT = {
@@ -32,6 +32,9 @@ export default class EmbarkLightchain extends BaseBlockchainPlugin {
 
   get nodeAccounts() {
     return (async () => {
+      if (!this.web3) {
+        return [];
+      }
       const accounts = await this.web3.eth.personal.getAccounts();
       return accounts.filter((account) =>
         // remove the test account that is meant for internal use only
